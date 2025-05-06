@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>HTML Diff Tool</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    textarea, input { width: 100%; margin-bottom: 10px; }
+    .diff-output { white-space: pre-wrap; background: #f4f4f4; padding: 1em; border-radius: 5px; }
+  </style>
+</head>
+<body>
+  <h1>Compare Headings and Paragraphs</h1>
+  <form id="compareForm">
+    <label>URL 1: <input type="url" id="url1" required></label>
+    <label>Selector 1 (optional): <input type="text" id="selector1"></label><br>
+
+    <label>URL 2: <input type="url" id="url2" required></label>
+    <label>Selector 2 (optional): <input type="text" id="selector2"></label><br>
+
+    <button type="submit">Compare</button>
+  </form>
+
+  <h2>Diff Output</h2>
+  <div id="output" class="diff-output"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/diff_match_patch/20121119/diff_match_patch.js"></script>
+  <script>
+    document.getElementById('compareForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const url1 = document.getElementById('url1').value;
+      const url2 = document.getElementById('url2').value;
+      const selector1 = document.getElementById('selector1').value;
+      const selector2 = document.getElementById('selector2').value;
+
+      const res = await fetch('https://YOUR-RENDER-URL.onrender.com/compare', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url1, url2, selector1, selector2 })
+      });
+
+      const { content1, content2 } = await res.json();
+
+      const dmp = new diff_match_patch();
+      const diff = dmp.diff_main(content1.join('\n'), content2.join('\n'));
+      dmp.diff_cleanupSemantic(diff);
+
+      const output = diff.map(([op, data]) => {
+        if (op === 1) return `<span style="background:#a6f3a6">${data}</span>`;
+        if (op === -1) return `<span style="background:#f3a6a6;text-decoration:line-through">${data}</span>`;
+        return `<span>${data}</span>`;
+      }).join('');
+
+      document.getElementById('output').innerHTML = output;
+    });
+  </script>
+</body>
+</html>
