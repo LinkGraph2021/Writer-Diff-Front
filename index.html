@@ -33,7 +33,7 @@
       const selector1 = document.getElementById('selector1').value;
       const selector2 = document.getElementById('selector2').value;
 
-      const res = await fetch('https://YOUR-RENDER-URL.onrender.com/compare', {
+      const res = await fetch('https://writer-diff-back.onrender.com/compare', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url1, url2, selector1, selector2 })
