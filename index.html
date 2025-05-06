@@ -33,25 +33,40 @@
       const selector1 = document.getElementById('selector1').value;
       const selector2 = document.getElementById('selector2').value;
 
-      const res = await fetch('https://writer-diff-back.onrender.com/compare', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url1, url2, selector1, selector2 })
-      });
+      try {
+        const res = await fetch('https://writer-diff-back.onrender.com/compare', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url1, url2, selector1, selector2 })
+        });
 
-      const { content1, content2 } = await res.json();
+        const result = await res.json();
 
-      const dmp = new diff_match_patch();
-      const diff = dmp.diff_main(content1.join('\n'), content2.join('\n'));
-      dmp.diff_cleanupSemantic(diff);
+        const content1 = [
+          ...(result.url1.headings || []),
+          ...(result.url1.paragraphs || [])
+        ].join('\n');
 
-      const output = diff.map(([op, data]) => {
-        if (op === 1) return `<span style="background:#a6f3a6">${data}</span>`;
-        if (op === -1) return `<span style="background:#f3a6a6;text-decoration:line-through">${data}</span>`;
-        return `<span>${data}</span>`;
-      }).join('');
+        const content2 = [
+          ...(result.url2.headings || []),
+          ...(result.url2.paragraphs || [])
+        ].join('\n');
 
-      document.getElementById('output').innerHTML = output;
+        const dmp = new diff_match_patch();
+        const diff = dmp.diff_main(content1, content2);
+        dmp.diff_cleanupSemantic(diff);
+
+        const output = diff.map(([op, data]) => {
+          if (op === 1) return `<span style="background:#a6f3a6">${data}</span>`;
+          if (op === -1) return `<span style="background:#f3a6a6;text-decoration:line-through">${data}</span>`;
+          return `<span>${data}</span>`;
+        }).join('');
+
+        document.getElementById('output').innerHTML = output;
+      } catch (err) {
+        document.getElementById('output').innerHTML = 'Error fetching or processing data: ' + err.message;
+        console.error(err);
+      }
     });
   </script>
 </body>
