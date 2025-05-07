@@ -1,23 +1,17 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>HTML Diff Tool</title>
   <style>
     body { font-family: sans-serif; padding: 20px; }
     textarea, input { width: 100%; margin-bottom: 10px; }
-    .diff-output { display: flex; gap: 20px; }
-    .diff-column { width: 50%; background: #f4f4f4; padding: 1em; border-radius: 5px; }
-    h1, h2, h3, h4, h5, h6, p {
-      margin-top: 1em;
-    }
-    .inserted {
-      background: #a6f3a6;
-    }
-    .deleted {
-      background: #f3a6a6;
-      text-decoration: line-through;
-    }
+    .diff-output { white-space: pre-wrap; background: #f4f4f4; padding: 1em; border-radius: 5px; margin-top: 2em; }
+    .column-wrapper { display: flex; gap: 20px; }
+    .column { flex: 1; background: #fafafa; padding: 10px; border: 1px solid #ccc; overflow-y: auto; max-height: 400px; }
+    .column h1, .column h2, .column h3, .column h4, .column h5, .column h6 { margin: 0.5em 0 0.2em; }
+    .added { background: #a6f3a6; }
+    .removed { background: #f3a6a6; text-decoration: line-through; }
   </style>
 </head>
 <body>
@@ -32,70 +26,49 @@
     <button type="submit">Compare</button>
   </form>
 
-  <h2>Diff Output</h2>
-  <div id="output" class="diff-output">
-    <div id="output1" class="diff-column"></div>
-    <div id="output2" class="diff-column"></div>
+  <h2>Structured Crawl Output</h2>
+  <div class="column-wrapper">
+    <div class="column" id="structured1"></div>
+    <div class="column" id="structured2"></div>
   </div>
+
+  <h2>Diff Comparison</h2>
+  <div id="output" class="diff-output"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/diff_match_patch/20121119/diff_match_patch.js"></script>
   <script>
-    function renderContent(node) {
-      if (!node) return '';
-      if (['h1','h2','h3','h4','h5','h6','p'].includes(node.type)) {
-        const tag = node.type;
-        const children = node.children.map(renderContent).join('');
-        return `<${tag}>${node.content}</${tag}>${children}`;
-      } else if (node.children) {
-        return node.children.map(renderContent).join('');
+    function renderStructuredContent(data, container) {
+      function recurse(nodes, depth = 0) {
+        return nodes.map(node => {
+          if (node.type.startsWith('h')) {
+            return `<${node.type}>${node.content}</${node.type}>`;
+          }
+          if (node.type === 'p') {
+            return `<p>${node.content}</p>`;
+          }
+          if (node.children && node.children.length) {
+            return recurse(node.children, depth + 1).join('\n');
+          }
+          return '';
+        }).join('\n');
       }
-      return '';
+      container.innerHTML = recurse(data);
     }
 
-    function renderDiffs(nodes1, nodes2, dmp) {
-      const maxLength = Math.max(nodes1.length, nodes2.length);
-      const output1 = [];
-      const output2 = [];
-
-      for (let i = 0; i < maxLength; i++) {
-        const node1 = nodes1[i];
-        const node2 = nodes2[i];
-
-        if (node1 && node2 && node1.type === node2.type) {
-          const diffs = dmp.diff_main(node1.content, node2.content);
-          dmp.diff_cleanupSemantic(diffs);
-
-          const content1 = diffs.map(([op, data]) => {
-            if (op === -1) return `<span class="deleted">${data}</span>`;
-            if (op === 0) return `<span>${data}</span>`;
-            return '';
-          }).join('');
-
-          const content2 = diffs.map(([op, data]) => {
-            if (op === 1) return `<span class="inserted">${data}</span>`;
-            if (op === 0) return `<span>${data}</span>`;
-            return '';
-          }).join('');
-
-          output1.push(`<${node1.type}>${content1}</${node1.type}>`);
-          output2.push(`<${node2.type}>${content2}</${node2.type}>`);
-
-          if (node1.children && node2.children) {
-            const childDiffs = renderDiffs(node1.children, node2.children, dmp);
-            output1.push(childDiffs.output1);
-            output2.push(childDiffs.output2);
+    function flattenContent(data) {
+      let result = [];
+      function recurse(nodes) {
+        nodes.forEach(node => {
+          if (node.type.startsWith('h')) {
+            result.push(`<${node.type}>${node.content}</${node.type}>`);
+          } else if (node.type === 'p') {
+            result.push(`<p>${node.content}</p>`);
           }
-        } else {
-          if (node1) {
-            output1.push(`<${node1.type} class="deleted">${node1.content}</${node1.type}>`);
-          }
-          if (node2) {
-            output2.push(`<${node2.type} class="inserted">${node2.content}</${node2.type}>`);
-          }
-        }
+          if (node.children && node.children.length) recurse(node.children);
+        });
       }
-
-      return { output1: output1.join(''), output2: output2.join('') };
+      recurse(data);
+      return result.join('\n');
     }
 
     document.getElementById('compareForm').addEventListener('submit', async (e) => {
@@ -114,14 +87,25 @@
 
         const result = await res.json();
 
-        const dmp = new diff_match_patch();
-        const diffs = renderDiffs(result.url1, result.url2, dmp);
+        renderStructuredContent(result.url1, document.getElementById('structured1'));
+        renderStructuredContent(result.url2, document.getElementById('structured2'));
 
-        document.getElementById('output1').innerHTML = diffs.output1;
-        document.getElementById('output2').innerHTML = diffs.output2;
+        const content1 = flattenContent(result.url1);
+        const content2 = flattenContent(result.url2);
+
+        const dmp = new diff_match_patch();
+        const diff = dmp.diff_main(content1, content2);
+        dmp.diff_cleanupSemantic(diff);
+
+        const output = diff.map(([op, data]) => {
+          if (op === 1) return `<span class="added">${data}</span>`;
+          if (op === -1) return `<span class="removed">${data}</span>`;
+          return `<span>${data}</span>`;
+        }).join('');
+
+        document.getElementById('output').innerHTML = output;
       } catch (err) {
-        document.getElementById('output1').innerHTML = 'Error fetching or processing data: ' + err.message;
-        document.getElementById('output2').innerHTML = '';
+        document.getElementById('output').innerHTML = 'Error fetching or processing data: ' + err.message;
         console.error(err);
       }
     });
