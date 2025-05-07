@@ -1,17 +1,15 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>HTML Diff Tool</title>
   <style>
     body { font-family: sans-serif; padding: 20px; }
     textarea, input { width: 100%; margin-bottom: 10px; }
     .diff-output { white-space: pre-wrap; background: #f4f4f4; padding: 1em; border-radius: 5px; margin-top: 2em; }
-    .column-wrapper { display: flex; gap: 20px; }
-    .column { flex: 1; background: #fafafa; padding: 10px; border: 1px solid #ccc; overflow-y: auto; max-height: 400px; }
-    .column h1, .column h2, .column h3, .column h4, .column h5, .column h6 { margin: 0.5em 0 0.2em; }
-    .added { background: #a6f3a6; }
-    .removed { background: #f3a6a6; text-decoration: line-through; }
+    .columns { display: flex; gap: 2em; margin-top: 2em; }
+    .column { flex: 1; border: 1px solid #ccc; padding: 1em; border-radius: 5px; background: #f9f9f9; overflow: auto; }
+    .column h1, .column h2, .column h3, .column h4, .column h5, .column h6 { margin-top: 1em; }
   </style>
 </head>
 <body>
@@ -26,10 +24,13 @@
     <button type="submit">Compare</button>
   </form>
 
-  <h2>Structured Crawl Output</h2>
-  <div class="column-wrapper">
-    <div class="column" id="structured1"></div>
-    <div class="column" id="structured2"></div>
+  <div class="columns">
+    <div class="column" id="leftColumn">
+      <h2>URL 1 Structure</h2>
+    </div>
+    <div class="column" id="rightColumn">
+      <h2>URL 2 Structure</h2>
+    </div>
   </div>
 
   <h2>Diff Comparison</h2>
@@ -38,37 +39,44 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/diff_match_patch/20121119/diff_match_patch.js"></script>
   <script>
     function renderStructuredContent(data, container) {
-      function recurse(nodes, depth = 0) {
-        return nodes.map(node => {
-          if (node.type.startsWith('h')) {
-            return `<${node.type}>${node.content}</${node.type}>`;
-          }
-          if (node.type === 'p') {
-            return `<p>${node.content}</p>`;
-          }
-          if (node.children && node.children.length) {
-            return recurse(node.children, depth + 1).join('\n');
-          }
-          return '';
-        }).join('\n');
+      container.innerHTML = '';
+      function walk(node, parent) {
+        const el = document.createElement('div');
+        el.style.marginLeft = (node.depth || 0) * 20 + 'px';
+
+        if (node.type.startsWith('h')) {
+          const heading = document.createElement(node.type);
+          heading.textContent = node.content;
+          el.appendChild(heading);
+        } else if (node.type === 'p') {
+          const para = document.createElement('p');
+          para.textContent = node.content;
+          el.appendChild(para);
+        }
+
+        parent.appendChild(el);
+        if (node.children) {
+          node.children.forEach(child => {
+            child.depth = (node.depth || 0) + 1;
+            walk(child, parent);
+          });
+        }
       }
-      container.innerHTML = recurse(data);
+      data.forEach(node => walk(node, container));
     }
 
-    function flattenContent(data) {
-      let result = [];
-      function recurse(nodes) {
-        nodes.forEach(node => {
-          if (node.type.startsWith('h')) {
-            result.push(`<${node.type}>${node.content}</${node.type}>`);
-          } else if (node.type === 'p') {
-            result.push(`<p>${node.content}</p>`);
-          }
-          if (node.children && node.children.length) recurse(node.children);
-        });
+    function flattenToTextBlocks(data) {
+      const output = [];
+      function flatten(node) {
+        if (node.type.startsWith('h')) {
+          output.push(`${node.type.toUpperCase()}: ${node.content}`);
+        } else if (node.type === 'p') {
+          output.push(node.content);
+        }
+        if (node.children) node.children.forEach(flatten);
       }
-      recurse(data);
-      return result.join('\n');
+      data.forEach(flatten);
+      return output;
     }
 
     document.getElementById('compareForm').addEventListener('submit', async (e) => {
@@ -87,19 +95,21 @@
 
         const result = await res.json();
 
-        renderStructuredContent(result.url1, document.getElementById('structured1'));
-        renderStructuredContent(result.url2, document.getElementById('structured2'));
+        // Render side-by-side structured view
+        renderStructuredContent(result.url1, document.getElementById('leftColumn'));
+        renderStructuredContent(result.url2, document.getElementById('rightColumn'));
 
-        const content1 = flattenContent(result.url1);
-        const content2 = flattenContent(result.url2);
+        // Flatten to text for comparison diff
+        const flat1 = flattenToTextBlocks(result.url1).join('\n');
+        const flat2 = flattenToTextBlocks(result.url2).join('\n');
 
         const dmp = new diff_match_patch();
-        const diff = dmp.diff_main(content1, content2);
+        const diff = dmp.diff_main(flat1, flat2);
         dmp.diff_cleanupSemantic(diff);
 
         const output = diff.map(([op, data]) => {
-          if (op === 1) return `<span class="added">${data}</span>`;
-          if (op === -1) return `<span class="removed">${data}</span>`;
+          if (op === 1) return `<span style="background:#a6f3a6">${data}</span>`;
+          if (op === -1) return `<span style="background:#f3a6a6;text-decoration:line-through">${data}</span>`;
           return `<span>${data}</span>`;
         }).join('');
 
