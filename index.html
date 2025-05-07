@@ -5,7 +5,9 @@
   <title>HTML Diff Tool</title>
   <style>
     body { font-family: sans-serif; padding: 20px; }
-    textarea, input { width: 100%; margin-bottom: 10px; }
+    textarea, input { width: 100%; margin-bottom: 10px; max-width: -webkit-fill-available;}
+    label { display: block; }
+    button[type=submit]{float: right;}
     .diff-output { white-space: pre-wrap; background: #f4f4f4; padding: 1em; border-radius: 5px; margin-top: 2em; }
     #compareForm { column-count: 2; width: 55%; }
     .columns { display: flex; gap: 2em; margin-top: 2em; height: max(85vh, 500px); }
