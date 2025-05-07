@@ -7,6 +7,16 @@
     body { font-family: sans-serif; padding: 20px; }
     textarea, input { width: 100%; margin-bottom: 10px; }
     .diff-output { white-space: pre-wrap; background: #f4f4f4; padding: 1em; border-radius: 5px; }
+    h1, h2, h3, h4, h5, h6, p {
+      margin-top: 1em;
+    }
+    .inserted {
+      background: #a6f3a6;
+    }
+    .deleted {
+      background: #f3a6a6;
+      text-decoration: line-through;
+    }
   </style>
 </head>
 <body>
@@ -26,6 +36,47 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/diff_match_patch/20121119/diff_match_patch.js"></script>
   <script>
+    function renderNodeDiff(node1, node2, dmp) {
+      if (!node1 && !node2) return '';
+      if (!node1) return `<div class="inserted">[ADDED]</div>`;
+      if (!node2) return `<div class="deleted">[REMOVED]</div>`;
+
+      // If both are text nodes
+      if (node1.type === 'text' && node2.type === 'text') {
+        const diffs = dmp.diff_main(node1.content, node2.content);
+        dmp.diff_cleanupSemantic(diffs);
+        return diffs.map(([op, data]) => {
+          if (op === 1) return `<span class="inserted">${data}</span>`;
+          if (op === -1) return `<span class="deleted">${data}</span>`;
+          return `<span>${data}</span>`;
+        }).join('');
+      }
+
+      // If same tag with content (like h2, p)
+      if (node1.type === node2.type && node1.content && node2.content) {
+        const diffs = dmp.diff_main(node1.content, node2.content);
+        dmp.diff_cleanupSemantic(diffs);
+        const inner = diffs.map(([op, data]) => {
+          if (op === 1) return `<span class="inserted">${data}</span>`;
+          if (op === -1) return `<span class="deleted">${data}</span>`;
+          return data;
+        }).join('');
+        return `<${node1.type}>${inner}</${node1.type}>`;
+      }
+
+      // If both are container elements with children
+      if (node1.children && node2.children) {
+        const children = [];
+        const max = Math.max(node1.children.length, node2.children.length);
+        for (let i = 0; i < max; i++) {
+          children.push(renderNodeDiff(node1.children[i], node2.children[i], dmp));
+        }
+        return `<${node1.type}>${children.join('')}</${node1.type}>`;
+      }
+
+      return '';
+    }
+
     document.getElementById('compareForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const url1 = document.getElementById('url1').value;
@@ -42,27 +93,16 @@
 
         const result = await res.json();
 
-        const content1 = [
-          ...(result.url1.headings || []),
-          ...(result.url1.paragraphs || [])
-        ].join('\n');
-
-        const content2 = [
-          ...(result.url2.headings || []),
-          ...(result.url2.paragraphs || [])
-        ].join('\n');
-
         const dmp = new diff_match_patch();
-        const diff = dmp.diff_main(content1, content2);
-        dmp.diff_cleanupSemantic(diff);
+        const output = [];
 
-        const output = diff.map(([op, data]) => {
-          if (op === 1) return `<span style="background:#a6f3a6">${data}</span>`;
-          if (op === -1) return `<span style="background:#f3a6a6;text-decoration:line-through">${data}</span>`;
-          return `<span>${data}</span>`;
-        }).join('');
+        const maxLength = Math.max(result.url1.length, result.url2.length);
+        for (let i = 0; i < maxLength; i++) {
+          const diffHTML = renderNodeDiff(result.url1[i], result.url2[i], dmp);
+          output.push(diffHTML);
+        }
 
-        document.getElementById('output').innerHTML = output;
+        document.getElementById('output').innerHTML = output.join('');
       } catch (err) {
         document.getElementById('output').innerHTML = 'Error fetching or processing data: ' + err.message;
         console.error(err);
